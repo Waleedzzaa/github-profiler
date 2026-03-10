@@ -1,26 +1,28 @@
-const { Builder, Browser } = require('selenium-webdriver');
+const { Builder, Browser, By, until } = require('selenium-webdriver');
+const chrome = require('selenium-webdriver/chrome');
 require('chromedriver');
 
 async function scrapeGitHubProfile(username) {
-    // 1. Build and launch the Chrome browser instance
+    
     let driver = await new Builder().forBrowser(Browser.CHROME).build();
-
     try {
-        // 2. Construct the URL and navigate to it
-        const targetUrl = `https://github.com/${username}`;
-        console.log(`Navigating to: ${targetUrl}`);
+        await driver.get(`https://github.com/${username}`);
         
-        await driver.get(targetUrl);
+        // Wait up to 5 seconds for the name element to appear in the DOM
+        let nameElement = await driver.wait(until.elementLocated(By.css('.p-nickname')), 5000);
         
-        console.log("Page loaded successfully.");
-
+        
+        // Extract the visible text from the elements
+        let fullName = await nameElement.getText();
+        
+        
+        console.log(`Extracted Name: ${fullName}`);
+       ;
     } catch (error) {
-        console.error("Error during execution:", error);
+        console.error("Error:", error);
     } finally {
-        // 3. Close the browser session to free up system resources
         await driver.quit();
     }
 }
 
-// Execute the function with a test username
-scrapeGitHubProfile('torvalds');
+scrapeGitHubProfile('flxkers');
