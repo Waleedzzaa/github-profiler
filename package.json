@@ -1,0 +1,17 @@
+{
+  "name": "github-profiler",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "chromedriver": "^146.0.1",
+    "pdfkit": "^0.17.2",
+    "selenium-webdriver": "^4.41.0"
+  }
+}
