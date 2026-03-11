@@ -24,4 +24,4 @@ async function scrapeGitHubProfile(username) {
     }
 }
 
-scrapeGitHubProfile('Mark');
+scrapeGitHubProfile('usernamehere');
