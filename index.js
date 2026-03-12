@@ -37,9 +37,20 @@ async function scrapeGitHubProfile(username) {
 
         let fullName = await nameElement.getText();
         let contrib = await contrElement.getText();
-
+      // --- Simplified Bio Extraction ---
+        let bioText = "No bio available"; // 1. Set a default
+        try {
+            // 2. Try to overwrite it with the real bio
+            bioText = await driver.findElement(By.css('.user-profile-bio')).getText();
+        } catch (e) {
+            // 3. Do nothing if it fails. It keeps the default.
+        }
+        console.log(`\n--- Profile Data ---`);
         console.log(` Name: ${fullName}`);
+        console.log(`Bio: ${bioText}`);
         console.log(`Contributions: ${contrib}`);
+        console.log(`--------------------\n`);
+
     } catch (error) {
         console.error("Error:", error);
     } finally {
