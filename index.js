@@ -5,7 +5,7 @@ require('chromedriver');
 
 async function scrapeGitHubProfile(username) {
     let options = new chrome.Options();
-    
+
     // --- CHROME OPTIONS ---
     options.addArguments('--headless=new');
     options.addArguments('--log-level=3');
@@ -18,7 +18,7 @@ async function scrapeGitHubProfile(username) {
     let driver = await new Builder()
         .forBrowser(Browser.CHROME)
         .setChromeOptions(options)
-        .setChromeService(service) 
+        .setChromeService(service)
         .build();
 
     try {
@@ -31,43 +31,83 @@ async function scrapeGitHubProfile(username) {
         let fullName = await nameElement.getText();
         let contrib = await contrElement.getText();
 
-        // Bio Extraction 
+        // --- Bio Extraction ---
         let bioText = "No bio available";
         try {
             bioText = await driver.findElement(By.css('.user-profile-bio')).getText();
-        } catch (e) {}
+        } catch (error) { }
 
-        //  Repositories and Stars Extraction (Regex Method) 
+        // --- Repositories and Stars Extraction ---
         let repoCount = "0";
         let starCount = "0";
         try {
-            let repoTab = await driver.wait(until.elementLocated(By.css('a[data-tab-item="repositories"]')), 5000);
-            let repoText = await repoTab.getAttribute('textContent'); 
-            let repoMatch = repoText.match(/\d+/); 
-            if (repoMatch) repoCount = repoMatch[0];
+            await driver.wait(until.elementLocated(By.css('a[data-tab-item="repositories"]')), 5000);
 
-            let starTab = await driver.findElement(By.css('a[data-tab-item="stars"]'));
-            let starText = await starTab.getAttribute('textContent');
-            let starMatch = starText.match(/\d+/);
-            if (starMatch) starCount = starMatch[0];
-        } catch (e) {}
-
-        // Pinned Repositories Extraction 
-        let pinnedRepos = "None";
-        try {
-            // 1. Find all elements matching the span.repo class
-            let repoElements = await driver.findElements(By.css('span.repo'));
-            
-            // 2. If found, loop through the array and extract the text from each
-            if (repoElements.length > 0) {
-                let repoNames = [];
-                for (let el of repoElements) {
-                    repoNames.push(await el.getText());
-                }
-                // 3. Convert the array into a comma-separated string
-                pinnedRepos = repoNames.join(', ');
+            let repos = await driver.findElements(By.css('a[data-tab-item="repositories"] span[data-component="counter"] span'));
+            if (repos.length > 0) {
+                repoCount = await repos[0].getText();
             }
-        } catch (e) {}
+
+            let stars = await driver.findElements(By.css('a[data-tab-item="stars"] span[data-component="counter"] span'));
+            if (stars.length > 0) {
+                starCount = await stars[0].getText();
+            }
+        } catch (error) { }
+
+        // --- 1. Gather Pinned Repo Names and Links ---
+        let pinnedRepos = [];
+        try {
+            let repoLinks = await driver.findElements(By.css('.pinned-item-list-item a.Link'));
+
+            for (let repoLink of repoLinks) {
+                let name = await repoLink.getText();
+                let url = await repoLink.getAttribute('href');
+                if (name && url) pinnedRepos.push({ name, url });
+            }
+        } catch (error) { }
+
+        // --- 2. Navigate to each Repo and Extract README & Languages ---
+        let repoDescriptions = [];
+        if (pinnedRepos.length > 0) {
+            console.log(`\nScanning ${pinnedRepos.length} repositories for data...`);
+
+            for (let repo of pinnedRepos) {
+                try {
+                    await driver.get(repo.url);
+
+                    // Allow GitHub's dynamic DOM to settle
+                    await driver.sleep(1500);
+
+                    // Extract README First Paragraph
+                    let descText = "No description available.";
+                    try {
+                        let firstParagraph = await driver.wait(until.elementLocated(By.css('article.markdown-body p')), 3000);
+                        descText = await firstParagraph.getText();
+                    } catch (err) { }
+
+                    // Extract Languages & Percentages
+                    let langsText = "Not specified";
+                    try {
+                        let langElements = await driver.findElements(By.css('.BorderGrid-cell li.d-inline'));
+                        let langArray = [];
+
+                        for (let langEl of langElements) {
+                            let text = await langEl.getAttribute('textContent');
+
+                            if (text && text.includes('%')) {
+                                langArray.push(text.replace(/\s+/g, ' ').trim());
+                            }
+                        }
+
+                        if (langArray.length > 0) langsText = langArray.join(', ');
+                    } catch (err) { }
+
+                    repoDescriptions.push(`- ${repo.name}: ${descText.trim()}\n  Languages: ${langsText}`);
+                } catch (error) {
+                    repoDescriptions.push(`- ${repo.name}: Failed to load repository data.`);
+                }
+            }
+        }
 
         // --- Print Results ---
         console.log(`\n--- Profile Data ---`);
@@ -75,8 +115,9 @@ async function scrapeGitHubProfile(username) {
         console.log(`Bio: ${bioText}`);
         console.log(`Repositories: ${repoCount}`);
         console.log(`Stars: ${starCount}`);
-        console.log(`Pinned Repos: ${pinnedRepos}`);
         console.log(`Contributions: ${contrib}`);
+        console.log(`\nTop Repositories:`);
+        repoDescriptions.forEach(repo => console.log(repo));
         console.log(`--------------------\n`);
 
     } catch (error) {
@@ -91,11 +132,11 @@ const rl = readline.createInterface({
     output: process.stdout
 });
 
-console.clear(); 
+console.clear();
 
 rl.question("Enter GitHub Username: ", (username) => {
     console.log("Retrieving info, please wait...");
     scrapeGitHubProfile(username.trim()).then(() => {
         rl.close();
     });
-});
+}); 
