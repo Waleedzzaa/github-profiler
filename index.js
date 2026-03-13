@@ -31,30 +31,43 @@ async function scrapeGitHubProfile(username) {
         let fullName = await nameElement.getText();
         let contrib = await contrElement.getText();
 
-        // --- Bio Extraction ---
+        // Bio Extraction 
         let bioText = "No bio available";
         try {
             bioText = await driver.findElement(By.css('.user-profile-bio')).getText();
         } catch (e) {}
 
-        // --- Repositories and Stars Extraction (Regex Method) ---
+        //  Repositories and Stars Extraction (Regex Method) 
         let repoCount = "0";
         let starCount = "0";
         try {
-            // 1. Wait for the Repositories tab to load, grab all text inside it, and extract the digits
             let repoTab = await driver.wait(until.elementLocated(By.css('a[data-tab-item="repositories"]')), 5000);
             let repoText = await repoTab.getAttribute('textContent'); 
             let repoMatch = repoText.match(/\d+/); 
             if (repoMatch) repoCount = repoMatch[0];
 
-            // 2. Find the Stars tab, grab all text inside it, and extract the digits
             let starTab = await driver.findElement(By.css('a[data-tab-item="stars"]'));
             let starText = await starTab.getAttribute('textContent');
             let starMatch = starText.match(/\d+/);
             if (starMatch) starCount = starMatch[0];
-        } catch (e) {
-            // Silently keep default "0" if elements aren't found
-        }
+        } catch (e) {}
+
+        // Pinned Repositories Extraction 
+        let pinnedRepos = "None";
+        try {
+            // 1. Find all elements matching the span.repo class
+            let repoElements = await driver.findElements(By.css('span.repo'));
+            
+            // 2. If found, loop through the array and extract the text from each
+            if (repoElements.length > 0) {
+                let repoNames = [];
+                for (let el of repoElements) {
+                    repoNames.push(await el.getText());
+                }
+                // 3. Convert the array into a comma-separated string
+                pinnedRepos = repoNames.join(', ');
+            }
+        } catch (e) {}
 
         // --- Print Results ---
         console.log(`\n--- Profile Data ---`);
@@ -62,6 +75,7 @@ async function scrapeGitHubProfile(username) {
         console.log(`Bio: ${bioText}`);
         console.log(`Repositories: ${repoCount}`);
         console.log(`Stars: ${starCount}`);
+        console.log(`Pinned Repos: ${pinnedRepos}`);
         console.log(`Contributions: ${contrib}`);
         console.log(`--------------------\n`);
 
