@@ -31,43 +31,83 @@ async function scrapeGitHubProfile(username) {
         let fullName = await nameElement.getText();
         let contrib = await contrElement.getText();
 
-        // Bio Extraction 
+        // --- Bio Extraction ---
         let bioText = "No bio available";
         try {
             bioText = await driver.findElement(By.css('.user-profile-bio')).getText();
-        } catch (e) {}
+        } catch (error) {}
 
-        //  Repositories and Stars Extraction (Regex Method) 
+        // --- Repositories and Stars Extraction ---
         let repoCount = "0";
         let starCount = "0";
         try {
-            let repoTab = await driver.wait(until.elementLocated(By.css('a[data-tab-item="repositories"]')), 5000);
-            let repoText = await repoTab.getAttribute('textContent'); 
-            let repoMatch = repoText.match(/\d+/); 
-            if (repoMatch) repoCount = repoMatch[0];
+            await driver.wait(until.elementLocated(By.css('a[data-tab-item="repositories"]')), 5000);
 
-            let starTab = await driver.findElement(By.css('a[data-tab-item="stars"]'));
-            let starText = await starTab.getAttribute('textContent');
-            let starMatch = starText.match(/\d+/);
-            if (starMatch) starCount = starMatch[0];
-        } catch (e) {}
+            repoCount = await driver.executeScript(`
+                let counterElement = document.querySelector('a[data-tab-item="repositories"] span[data-component="counter"] span');
+                return counterElement ? counterElement.textContent.trim() : "0";
+            `);
 
-        // Pinned Repositories Extraction 
-        let pinnedRepos = "None";
+            starCount = await driver.executeScript(`
+                let counterElement = document.querySelector('a[data-tab-item="stars"] span[data-component="counter"] span');
+                return counterElement ? counterElement.textContent.trim() : "0";
+            `);
+        } catch (error) {}
+
+        // --- 1. Gather Pinned Repo Names and Links ---
+        let pinnedRepos = [];
         try {
-            // 1. Find all elements matching the span.repo class
-            let repoElements = await driver.findElements(By.css('span.repo'));
+            let repoLinks = await driver.findElements(By.css('.pinned-item-list-item a.Link'));
             
-            // 2. If found, loop through the array and extract the text from each
-            if (repoElements.length > 0) {
-                let repoNames = [];
-                for (let el of repoElements) {
-                    repoNames.push(await el.getText());
-                }
-                // 3. Convert the array into a comma-separated string
-                pinnedRepos = repoNames.join(', ');
+            for (let repoLink of repoLinks) {
+                let name = await repoLink.getText();
+                let url = await repoLink.getAttribute('href');
+                if (name && url) pinnedRepos.push({ name, url });
             }
-        } catch (e) {}
+        } catch (error) {}
+
+        // --- 2. Navigate to each Repo and Extract README & Languages ---
+        let repoDescriptions = [];
+        if (pinnedRepos.length > 0) {
+            console.log(`\nScanning ${pinnedRepos.length} repositories for data...`);
+            
+            for (let repo of pinnedRepos) {
+                try {
+                    await driver.get(repo.url);
+                    
+                    // Allow GitHub's dynamic DOM to settle
+                    await driver.sleep(1500); 
+
+                    // Extract README First Paragraph
+                    let descText = "No description available.";
+                    try {
+                        let firstParagraph = await driver.wait(until.elementLocated(By.css('article.markdown-body p')), 3000);
+                        descText = await firstParagraph.getText();
+                    } catch (err) {}
+
+                    // Extract Languages & Percentages
+                    let langsText = "Not specified";
+                    try {
+                        let langElements = await driver.findElements(By.css('.BorderGrid-cell li.d-inline'));
+                        let langArray = [];
+                        
+                        for (let langEl of langElements) {
+                            let text = await langEl.getAttribute('textContent'); 
+                            
+                            if (text && text.includes('%')) {
+                                langArray.push(text.replace(/\s+/g, ' ').trim()); 
+                            }
+                        }
+                        
+                        if (langArray.length > 0) langsText = langArray.join(', ');
+                    } catch (err) {}
+                    
+                    repoDescriptions.push(`- ${repo.name}: ${descText.trim()}\n  Languages: ${langsText}`);
+                } catch (error) {
+                    repoDescriptions.push(`- ${repo.name}: Failed to load repository data.`);
+                }
+            }
+        }
 
         // --- Print Results ---
         console.log(`\n--- Profile Data ---`);
@@ -75,8 +115,9 @@ async function scrapeGitHubProfile(username) {
         console.log(`Bio: ${bioText}`);
         console.log(`Repositories: ${repoCount}`);
         console.log(`Stars: ${starCount}`);
-        console.log(`Pinned Repos: ${pinnedRepos}`);
         console.log(`Contributions: ${contrib}`);
+        console.log(`\nTop Repositories:`);
+        repoDescriptions.forEach(repo => console.log(repo));
         console.log(`--------------------\n`);
 
     } catch (error) {
