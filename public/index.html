@@ -61,7 +61,8 @@
 
                 if (data.topRepositories && data.topRepositories.length > 0) {
                     html += `<h4 class="section-title">Top Repositories</h4><div class="repo-grid">`;
-                    data.topRepositories.forEach(repo => {
+                    for (let i = 0; i < data.topRepositories.length; i++) {
+                        let repo = data.topRepositories[i];
                         html += `
                             <div class="repo-card">
                                 <h5>${repo.name}</h5>
@@ -69,7 +70,7 @@
                                 <p class="repo-lang"><span class="lang-dot"></span> ${repo.languages}</p>
                             </div>
                         `;
-                    });
+                    }
                     html += `</div>`;
                 } else {
                     html += `<div class="placeholder-text">No top repositories found.</div>`;

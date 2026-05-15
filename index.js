@@ -22,6 +22,8 @@ async function scrapeGitHubProfile(username) {
     options.addArguments('--disable-logging');
     options.excludeSwitches(['enable-logging']);
     options.setPageLoadStrategy('eager');
+    // Block images from loading to improve performance
+    options.setUserPreferences({ 'profile.managed_default_content_settings.images': 2 });
 
     let service = new chrome.ServiceBuilder().loggingTo('NUL');
 
@@ -65,7 +67,8 @@ async function scrapeGitHubProfile(username) {
         try {
             let repoLinks = await driver.findElements(By.css('.pinned-item-list-item a.Link'));
 
-            for (let repoLink of repoLinks) {
+            for (let i = 0; i < repoLinks.length; i++) {
+                let repoLink = repoLinks[i];
                 let name = await repoLink.getText();
                 let url = await repoLink.getAttribute('href');
                 if (name && url) pinnedRepos.push({ name, url });
@@ -74,45 +77,64 @@ async function scrapeGitHubProfile(username) {
 
         let repoDescriptions = [];
         if (pinnedRepos.length > 0) {
-            for (let repo of pinnedRepos) {
-                try {
-                    await driver.get(repo.url);
-                    await driver.sleep(1500);
+            let repoPromises = [];
+            for (let i = 0; i < pinnedRepos.length; i++) {
+                let repo = pinnedRepos[i];
+                
+                let promise = (async () => {
+                    // We need a separate driver for each concurrent request
+                    let repoDriver = await new Builder()
+                        .forBrowser(Browser.CHROME)
+                        .setChromeOptions(options)
+                        .setChromeService(service)
+                        .build();
 
-                    let descText = "No description available.";
                     try {
-                        let firstParagraph = await driver.wait(until.elementLocated(By.css('article.markdown-body p')), 2000);
-                        descText = await firstParagraph.getText();
-                    } catch (err) { }
+                        await repoDriver.get(repo.url);
+                        await repoDriver.sleep(1500);
 
-                    let langsText = "Not specified";
-                    try {
-                        let langElements = await driver.findElements(By.css('.BorderGrid-cell li.d-inline'));
-                        let langArray = [];
+                        let descText = "No description available.";
+                        try {
+                            let firstParagraph = await repoDriver.wait(until.elementLocated(By.css('article.markdown-body p')), 2000);
+                            descText = await firstParagraph.getText();
+                        } catch (err) { }
 
-                        for (let langEl of langElements) {
-                            let text = await langEl.getAttribute('textContent');
-                            if (text && text.includes('%')) {
-                                langArray.push(text.replace(/\s+/g, ' ').trim());
+                        let langsText = "Not specified";
+                        try {
+                            let langElements = await repoDriver.findElements(By.css('.BorderGrid-cell li.d-inline'));
+                            let langArray = [];
+
+                            for (let j = 0; j < langElements.length; j++) {
+                                let langEl = langElements[j];
+                                let text = await langEl.getAttribute('textContent');
+                                if (text && text.includes('%')) {
+                                    langArray.push(text.replace(/\s+/g, ' ').trim());
+                                }
                             }
-                        }
 
-                        if (langArray.length > 0) langsText = langArray.join(', ');
-                    } catch (err) { }
+                            if (langArray.length > 0) langsText = langArray.join(', ');
+                        } catch (err) { }
 
-                    repoDescriptions.push({
-                        name: repo.name,
-                        description: descText.trim(),
-                        languages: langsText
-                    });
-                } catch (error) {
-                    repoDescriptions.push({
-                        name: repo.name,
-                        description: "Failed to load",
-                        languages: "N/A"
-                    });
-                }
+                        return {
+                            name: repo.name,
+                            description: descText.trim(),
+                            languages: langsText
+                        };
+                    } catch (error) {
+                        return {
+                            name: repo.name,
+                            description: "Failed to load",
+                            languages: "N/A"
+                        };
+                    } finally {
+                        await repoDriver.quit();
+                    }
+                })();
+                
+                repoPromises.push(promise);
             }
+
+            repoDescriptions = await Promise.all(repoPromises);
         }
 
         return {
