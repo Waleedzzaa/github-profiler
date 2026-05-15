@@ -11,6 +11,7 @@
   "description": "",
   "dependencies": {
     "chromedriver": "^145.0.6",
+    "express": "^5.2.1",
     "pdfkit": "^0.17.2",
     "selenium-webdriver": "^4.41.0"
   }
